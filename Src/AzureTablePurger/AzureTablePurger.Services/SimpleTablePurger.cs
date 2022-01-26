@@ -31,15 +31,44 @@ namespace AzureTablePurger.Services
             ServicePointManager.DefaultConnectionLimit = ConnectionLimit;
         }
 
-        public async Task<Tuple<int, int>> PurgeEntitiesAsync(PurgeEntitiesOptions options, CancellationToken cancellationToken)
+        public async Task PurgeEntitiesAsync(PurgeEntitiesOptions options, CancellationToken cancellationToken)
+        {
+            List<string> targetTableNames = new List<string>();
+            if (options.TargetTableNames == null || options.TargetTableNames.Count() == 0)
+            {
+                _logger.LogInformation($"Getting all table names for the account");
+                CloudStorageAccount storageAccount = CloudStorageAccount.Parse(options.TargetAccountConnectionString);
+                CloudTableClient tableClient = new CloudTableClient(storageAccount.TableEndpoint, storageAccount.Credentials);
+                var result = tableClient.ListTables();
+                if (result != null)
+                {
+                    foreach (var item in result)
+                    {
+                        _logger.LogInformation($"Table {item.Name} added for purge");
+                        targetTableNames.Add(item.Name);
+                    }
+                }
+            } else
+            {
+                targetTableNames.AddRange(options.TargetTableNames);
+            }
+            
+            foreach (var targetTableName in targetTableNames)
+            {
+                await PurgeEntitiesAsync(options, targetTableName, cancellationToken);
+            }
+            
+        }
+
+        public async Task<Tuple<int, int>> PurgeEntitiesAsync(PurgeEntitiesOptions options, string targetTableName, CancellationToken cancellationToken)
         {
             var sw = new Stopwatch();
             sw.Start();
 
-            _logger.LogInformation($"Starting PurgeEntitiesAsync");
+            _logger.LogInformation($"Starting PurgeEntitiesAsync for {targetTableName}");
 
             var tableClient = _storageClientFactory.GetCloudTableClient(options.TargetAccountConnectionString);
-            var table = tableClient.GetTableReference(options.TargetTableName);
+            var table = tableClient.GetTableReference(targetTableName);
 
             _logger.LogInformation($"TargetAccount={tableClient.StorageUri.PrimaryUri}, Table={table.Name}, PurgeRecordsOlderThanDays={options.PurgeRecordsOlderThanDays}");
 
@@ -107,7 +136,7 @@ namespace AzureTablePurger.Services
             var entitiesPerSecond = numEntitiesDeleted > 0 ? (int)(numEntitiesDeleted / sw.Elapsed.TotalSeconds) : 0;
             var msPerEntity = numEntitiesDeleted > 0 ? (int)(sw.Elapsed.TotalMilliseconds / numEntitiesDeleted) : 0;
             
-            _logger.LogInformation($"Finished PurgeEntitiesAsync, processed {numPagesProcessed} pages and deleted {numEntitiesDeleted} entities in {sw.Elapsed} ({entitiesPerSecond} entities per second, or {msPerEntity} ms per entity)");
+            _logger.LogInformation($"Finished PurgeEntitiesAsync for {targetTableName}, processed {numPagesProcessed} pages and deleted {numEntitiesDeleted} entities in {sw.Elapsed} ({entitiesPerSecond} entities per second, or {msPerEntity} ms per entity)");
 
             return new Tuple<int, int>(numPagesProcessed, numEntitiesDeleted);
         }

@@ -15,7 +15,7 @@ namespace AzureTablePurger.App
     class Program
     {
         private const string ConfigKeyTargetStorageAccountConnectionString = "TargetStorageAccountConnectionString";
-        private const string ConfigKeyTargetTableName = "TargetTableName";
+        private const string ConfigKeyTargetTableName = "TargetTableNames";
         private const string ConfigKeyPurgeRecordsOlderThanDays = "PurgeRecordsOlderThanDays";
 
         private static ServiceProvider _serviceProvider;
@@ -35,10 +35,12 @@ namespace AzureTablePurger.App
 
                 var tablePurger = _serviceProvider.GetService<ITablePurger>();
 
+                List<string> targetTableNames = new List<string>();
+                _config.GetSection(ConfigKeyTargetTableName).Bind(targetTableNames);
                 var options = new PurgeEntitiesOptions
                 {
                     TargetAccountConnectionString = _config[ConfigKeyTargetStorageAccountConnectionString],
-                    TargetTableName = _config[ConfigKeyTargetTableName],
+                    TargetTableNames = targetTableNames,
                     PurgeRecordsOlderThanDays = int.Parse(_config[ConfigKeyPurgeRecordsOlderThanDays])
                 };
 
